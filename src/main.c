@@ -9,8 +9,9 @@
 #include <time.h>
 #include <sqlite3.h>
 #include <stdbool.h>
+#include <libgen.h>
 #define NUM_BUFFERS 4
-#include "dotenv.h"
+#include "./lib/dotenv.h"
 typedef struct {
     char chunkID[4];       // "RIFF"
     uint32_t chunkSize;    // File size - 8 bytes
@@ -170,11 +171,11 @@ alSourceStop(*source);
    alcDestroyContext(context);
    alcCloseDevice(device);
 }
-int insertPlaylist(const char *song,sqlite3 *db,const char *name,int rc){
+int insertPlaylist(const char *song,sqlite3 *db,const char *name){
 
     const char *sql = "INSERT INTO songs (name, path) VALUES (?, ?)";
     sqlite3_stmt *stmt;
-    rc = sqlite3_prepare_v2(db, sql,-1, &stmt,0);
+    int rc = sqlite3_prepare_v2(db, sql,-1, &stmt,NULL);
     if(rc != SQLITE_DONE){
         fprintf(stderr, "SQL error: %s \n", sqlite3_errmsg(db));
         return rc;
@@ -190,20 +191,33 @@ int insertPlaylist(const char *song,sqlite3 *db,const char *name,int rc){
     sqlite3_finalize(stmt);
     return SQLITE_OK;
 }
-char *getName(char song[]){
-    size_t len = strlen(song);
-    char *name = malloc(len + 1);
-    if (!name) {
-        fprintf(stderr, "Memory allocation failed\n");
+char *getName(const char *song){
+    char *path_cp = strdup(song);
+    if(!path_cp){
+        perror("failed malloc in getName");
         return NULL;
     }
-    int i;
-    for (int i = 0; song[i] != '.' && song[i] != '\0';i++) {
-        name[i] = song[i];
+    char *filename  = strrchr(path_cp,'/');
+    if(filename == NULL){
+        filename = path_cp;
+    }else {
+        filename++;
     }
-    name[i] = '\0';
+    char *name = strdup(filename);
+    free(path_cp);
+    if(!name){
+        perror("failed malloc in getName");
+        return NULL;
+    }
+
+    char *dot = strrchr(name, '.');
+    if(dot != NULL){
+        *dot = '\0';
+    }
+
     return name;
 }
+
 
 void PlayingSong(FILE *waves_file,int *correct){
 int user_volume;
@@ -278,7 +292,7 @@ sqlite3 *OpenDB(int *rc){
         return NULL;
         }
     sqlite3 *db;
-    *rc = sqlite3_open("playlist.db", &db);
+    *rc = sqlite3_open("db_path", &db);
     if (rc) {
         fprintf(stderr, "Can't open database: %s\n", sqlite3_errmsg(db));
         sqlite3_close(db);
@@ -290,6 +304,7 @@ int main(){
       char q1;
     printf("Do you want to play song y/n?\n");
     scanf("%c",&q1);
+    while ((q1 = getchar()) != '\n' && q1 != EOF) { }
     if(q1 == 'y' || q1 == 'Y'){
         char file[256];
         printf("Give path to file: ");
@@ -307,25 +322,37 @@ int main(){
     }
     char input;
     printf("Do you want to create a playlist y/n \n");
-    scanf("%c",&input);
+    scanf(" %c", &input);
+    while ((q1 = getchar()) != '\n' && q1 != EOF) { }
     if (input == 'y' || input == 'Y') {
         bool con = true;
-        int rc;
-        sqlite3 *db = OpenDB(&rc);
+       // int rc;
+       // sqlite3 *db = OpenDB(&rc);
         while(con){
             char song[256];
             printf("past the file adress of the song \n");
-            scanf("%255s",song);
+            if(fgets(song, sizeof(song),stdin) != NULL){
+                size_t len  =strlen(song);
+                if(len > 0 && song[len-1] == '\n'){
+                    song[len-1] = '\0';
+                }
+
+            }else {
+            fprintf(stdout,"wrong path");
+                continue;
+            }
+            while ((q1 = getchar()) != '\n' && q1 != EOF) { }
             FILE *song_check = CheckTheFile(song);
             if(!song_check){
                 printf("wrong path");
                 continue;
             }
-            int rc;
-
 
             char *name = getName(song);
-            if(insertPlaylist(song,db,name,rc) != 0){
+            printf("name of song: %c \n",*name);
+            break;
+        }
+           /* if(insertPlaylist(song,db,name) != 0){
                 fprintf(stderr, "Failed to insert song into playlist\n");
             }
             free(name);
@@ -340,9 +367,12 @@ int main(){
     }else if (input == 'n') {
         return 0;
     }else {
-        printf("wrong input");
+        printf("wrong input \n");
     }
+    */
+
+
     return 0;
 
 }
-
+}

@@ -1,8 +1,7 @@
 CREATE TABLE songs (
     id INTEGER PRIMARY KEY,
     name TEXT NOT NULL,
-    path TEXT NOT NULL,
-    duration INTEGER
+    path TEXT NOT NULL
 );
 
 CREATE TABLE playlists (

@@ -12,7 +12,9 @@ LIB_OBJ = $(LIB_SRC:.c=.o)
 
 OBJ = $(MAIN_OBJ) $(LIB_OBJ)
 EXEC = main
-
+EXEC_DIR = exec
+EXECUTABLE = $(EXEC_DIR)/$(EXEC)
+$(shell mkdir -p $(EXEC_DIR))
 all: $(EXEC)
 
 $(EXEC): $(OBJ)

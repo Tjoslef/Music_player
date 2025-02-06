@@ -30,6 +30,15 @@ const char *reading_song_form_db(sqlite3 *db,char *name){
     sqlite3_finalize(stmt);
  return song_path;
 }
+void free_song_list(SongNode *head){
+    while(head != NULL){
+    SongNode *temp = head;
+    head = head->next;
+    free(temp->path);
+    free(temp->name);
+    free(temp);
+    }
+}
 SongNode *reading_in_order(sqlite3 *db,int id){
     if(db == NULL){
         fprintf(stderr,"database isnt establish");
@@ -37,7 +46,7 @@ SongNode *reading_in_order(sqlite3 *db,int id){
     }
     sqlite3_stmt *stmt;
    const char *sql =
-    "SELECT songs.path,songs.name, playlist_songs.position"
+    "SELECT songs.path, songs.name, playlist_songs.position"
     "FROM playlist_songs "
     "INNER JOIN songs ON playlist_songs.song_id = songs.id "
     "WHERE playlist_songs.playlist_id = ? "
@@ -47,38 +56,37 @@ SongNode *reading_in_order(sqlite3 *db,int id){
         fprintf(stderr, "something gone wrong in preparation %s \n",sqlite3_errmsg(db));
         return NULL;
     }
+
     sqlite3_bind_int(stmt,1,id);
     rc = sqlite3_step(stmt);
-    if (rc == SQLITE_OK) {
-    sqlite3_bind_int(stmt, 1, id);
-    }
+
     SongNode *head = NULL;
-    SongNode *current = NULL;
+    SongNode *tail = NULL;
     while((rc = sqlite3_step(stmt)) == SQLITE_ROW) {
         SongNode *newSong = malloc(sizeof(SongNode));
         if(newSong == NULL){
             fprintf(stderr, "Error in malloc");
+            free_song_list(head);
             return  NULL;
         }
         newSong->path = strdup((const char *)sqlite3_column_text(stmt, 0));
         newSong->name = strdup((const char *)sqlite3_column_text(stmt, 1));
         newSong->next = NULL;
+        newSong->prev = NULL;
     if(head == NULL){
         head = newSong;
-        current = newSong;
-    }else {
-        current->next = newSong;
-        current = newSong;
+        tail = newSong;
+    }else{
+        tail->next = newSong;
+        newSong->prev = tail;
+        tail = newSong;
         }
     }
+
     if(rc != SQLITE_DONE){
         fprintf(stderr, "Error executing query: %s\n", sqlite3_errmsg(db));
         while (head != NULL) {
-            SongNode *temp = head;
-            head = head->next;
-            free(temp->path);
-            free(temp->name);
-            free(temp);
+           free_song_list(head);
         }
         head = NULL;
     }
@@ -111,7 +119,25 @@ int finding_playlist(sqlite3 *db,char *name_playlist){
     }
     sqlite3_finalize(stmt);
     return playlist_id;
+}
+SongNode *moving_in_playlist(SongNode *head,int direction){
+    if(direction == -1){
+        if(head && head->prev){
+            return head->prev;
 
+        }else{
+            return head;
 
+        }
+    }else if (direction == 1) {
+        if(head && head->next){
+           return head->next;
 
+        }else {
+         return head;
+        }
+    }else{
+    fprintf(stderr,"something sus in moving_in_playlist \n");
+        return NULL;
+    }
 }

@@ -4,28 +4,33 @@ STRICT_FLAGS = -Wall -Wextra -Werror
 CPPFLAGS = -I/usr/include/AL
 LDFLAGS = -lopenal -lsqlite3
 
-MAIN_SRC = $(wildcard src/*.c)
-MAIN_OBJ = $(MAIN_SRC:.c=.o)
+SRC_DIR = src
+OBJ_DIR = obj
+LIB_DIR = $(SRC_DIR)/lib
 
-LIB_SRC = $(wildcard src/lib/*.c)
-LIB_OBJ = $(LIB_SRC:.c=.o)
+MAIN_SRC = $(wildcard $(SRC_DIR)/*.c)
+MAIN_OBJ = $(patsubst $(SRC_DIR)/%.c,$(OBJ_DIR)/%.o,$(MAIN_SRC))
+
+LIB_SRC = $(wildcard $(LIB_DIR)/*.c)
+LIB_OBJ = $(patsubst $(LIB_DIR)/%.c,$(OBJ_DIR)/lib/%.o,$(LIB_SRC))
 
 OBJ = $(MAIN_OBJ) $(LIB_OBJ)
 EXEC = main
 EXEC_DIR = exec
 EXECUTABLE = $(EXEC_DIR)/$(EXEC)
-$(shell mkdir -p $(EXEC_DIR))
+
+$(shell mkdir -p $(OBJ_DIR) $(OBJ_DIR)/lib $(EXEC_DIR))
 all: $(EXEC)
 
 $(EXEC): $(OBJ)
-	$(CC) $(COMMON_FLAGS) $^ -o $@ $(LDFLAGS)
+	$(CC) $(COMMON_FLAGS) $^ -o $(EXECUTABLE) $(LDFLAGS)
 
-src/%.o: src/%.c
+$(OBJ_DIR)/%.o: $(SRC_DIR)/%.c
 	$(CC) $(COMMON_FLAGS) $(STRICT_FLAGS) $(CPPFLAGS) -c $< -o $@
 
-src/lib/%.o: src/lib/%.c
+$(OBJ_DIR)/lib/%.o: $(LIB_DIR)/%.c
 	$(CC) $(COMMON_FLAGS) $(CPPFLAGS) -c $< -o $@
 
 clean:
-	rm -f $(OBJ) $(EXEC)
-
+	rm -rf $(OBJ_DIR) $(EXECUTABLE)
+.PHONY: all clean

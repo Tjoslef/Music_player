@@ -2,3 +2,7 @@
 .env
 #Debug
 vgcore.*
+#.o files
+./obj
+#vs code
+.vscode/

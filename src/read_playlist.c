@@ -46,11 +46,11 @@ SongNode *reading_in_order(sqlite3 *db,int id){
     }
     sqlite3_stmt *stmt;
    const char *sql =
-    "SELECT songs.path, songs.name, playlist_songs.position"
-    "FROM playlist_songs "
-    "INNER JOIN songs ON playlist_songs.song_id = songs.id "
-    "WHERE playlist_songs.playlist_id = ? "
-    "ORDER BY playlist_songs.position";
+   "SELECT songs.path, songs.name, playlist_songs.position "
+"FROM playlist_songs "
+"INNER JOIN songs ON playlist_songs.song_id = songs.id "
+"WHERE playlist_songs.playlist_id = ? "
+"ORDER BY playlist_songs.position";
     int rc = sqlite3_prepare_v2(db, sql, -1, &stmt,NULL);
     if(rc != SQLITE_OK){
         fprintf(stderr, "something gone wrong in preparation %s \n",sqlite3_errmsg(db));
@@ -95,27 +95,34 @@ SongNode *reading_in_order(sqlite3 *db,int id){
 
 }
 int finding_playlist(sqlite3 *db,char *name_playlist){
+
    if(db == NULL){
+
     fprintf(stderr,"databses isnt establish");
     return -1;
     }
     sqlite3_stmt *stmt;
-    const char *sql = "SELECT id FROM playlist WHERE name = ?";
+    const char *sql = "SELECT id FROM playlists WHERE trim(name) = trim(?)";
     int rc = sqlite3_prepare_v2(db, sql,-1,&stmt,NULL);
     if( rc != SQLITE_OK){
-        fprintf(stderr, "something gone wrong in preparation %s \n",sqlite3_errmsg(db));
+        fprintf(stderr, "something gone wrong in preparation in finding_playlist %s %s \n",sqlite3_errmsg(db),name_playlist);
         return -1;
         }
-    if(name_playlist != NULL){
-        sqlite3_bind_text(stmt, 1, name_playlist, -1, SQLITE_STATIC);
-        }
+    rc = sqlite3_bind_text(stmt,1,name_playlist,-1, SQLITE_STATIC);
+    if(rc != SQLITE_OK){
+       fprintf(stderr, "Binding error in finding_playlist: %s\n", sqlite3_errmsg(db));
+        sqlite3_finalize(stmt);
+        return -1;
+    }
     int playlist_id = -1;
     if((rc = sqlite3_step(stmt)) == SQLITE_ROW){
         playlist_id = sqlite3_column_int(stmt, 0);
+        printf("Found the playlist id %d \n",playlist_id);
         }else if (rc == SQLITE_DONE){
-            fprintf(stderr, "No playlist  this name found: %s \n",name_playlist);
+            fprintf(stderr, "No playlist  this name found: '%s' \n",name_playlist);
     }else{
         fprintf(stderr, "Error executing query: %s \n",sqlite3_errmsg(db));
+        return playlist_id = -2;
     }
     sqlite3_finalize(stmt);
     return playlist_id;

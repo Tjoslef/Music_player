@@ -105,7 +105,7 @@ int createPlaylist(sqlite3 *db, const char *name_of_playlist,int *id_playlist) {
     return name;
 }
 sqlite3 *OpenDB(int *rc){
-    env_load(".", false);
+    env_load("/home/tjoslef/skola/music_player/.env", false);
     const char* db_path = getenv("DB_PATH");
     if (db_path == NULL) {
         fprintf(stderr, "DB_PATH not found in .env file\n");

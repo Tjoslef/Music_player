@@ -6,3 +6,5 @@ vgcore.*
 ./obj
 #vs code
 .vscode/
+tests/cpputest/
+

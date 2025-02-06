@@ -3,8 +3,9 @@
 #Debug
 vgcore.*
 #.o files
-./obj
+obj/
 #vs code
 .vscode/
 tests/cpputest/
+exec/
 

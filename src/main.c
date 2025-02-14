@@ -2,8 +2,14 @@
 #include "./headers/playlist.h"
 #include "./headers/read_platlist.h"
 #include "./headers/audio.h"
+#include <termios.h>
+#include <pthread.h>
+#include <unistd.h>
+#include <fcntl.h>
 #include <ctype.h>
 #include <string.h>
+volatile bool skip_flag = false;
+pthread_mutex_t skip_mutex = PTHREAD_MUTEX_INITIALIZER;
 char *trimming(char *name){
     if(name == NULL) return NULL;
     while(isspace((unsigned char) *name)) name++;
@@ -26,11 +32,17 @@ char get_user_input(const char *prompt) {
     }
     return '\0';
 }
-void set_nonblock(int state){
-    struct terminos ttystate;
-
-}
-int main(){
+void set_nonblock(int state) {
+    struct termios ttystate;
+    tcgetattr(STDIN_FILENO, &ttystate);
+    if (state == 1) {
+        ttystate.c_lflag &= ~ICANON;
+        ttystate.c_cc[VMIN] = 1;
+    } else if (state == 0) {
+        ttystate.c_lflag |= ICANON;
+    }
+    tcsetattr(STDIN_FILENO, TCSANOW, &ttystate);
+}int main(){
     int rc;
     sqlite3 *db = NULL;
     bool cont = true;
@@ -118,16 +130,42 @@ while(cont){
                             fprintf(stderr,"something of in reading playlist \n");
                         }
                             while(head != NULL){
+                                set_nonblock(1);
                                 char c[256];
                                 char n;
                                 printf("playing.. \n");
                                 int correct = 0;
-                                PlayingSong(head->path, &correct);
-                                if (correct != 0) {
-                                   fprintf(stderr, "Failed playing song: %s\n", head->name);
+                                ThreadArgs args = {
+                                    .path = head->path,
+                                    .correct = &correct,
+                                    .skip_flag = &skip_flag
+
+                                };
+                                pthread_t tread_id;
+                                if(pthread_create(&tread_id,NULL,PlayingSong,&args) != 0){
+                                continue;
                             }
+                            while(1){
+                            if(read(STDIN_FILENO,c,sizeof(c)) >0){
+                                if(strcmp(c,"skip") == 0){
+                                    pthread_mutex_lock(&skip_mutex);
+                                    skip_flag = true;
+                                    pthread_mutex_unlock(&skip_mutex);
+                                    break;
+
+                                }
+                            }
+                            usleep(10000);
+                            }
+                            pthread_join(tread_id,NULL);
+                            if (correct != 0) {
+                               fprintf(stderr, "Failed playing song: %s\n", head->name);
+                            }
+                            pthread_mutex_lock(&skip_mutex);
+                            skip_flag = false;
+                            pthread_mutex_unlock(&skip_mutex);
                             head = head->next;
-                    }
+                        }
                 }
             }
             }

@@ -4,6 +4,17 @@ void clear_buffer(ALuint *buffers,short *temp_buffer){
             free(temp_buffer);
             free(buffers);
 }
+/**
+ * reading_wav - Reads WAV file and initializes audio information
+ *
+ * @param filename Path to the WAV file
+ * @param wheader Pointer to WAVHeader struct to store audio parameters
+ * @param file_ptr Pointer to SNDFILE pointer for file handling
+ * @param sfinfo Pointer to SF_INFO struct for libsndfile
+ *
+ * Opens WAV file, reads audio information, and sets up file pointer for further processing.
+ * Uses libsndfile for file operations.
+ */
 void reading_wav(const char *filename,WAVHeader *wheader,SNDFILE **file_ptr, SF_INFO *sfinfo){
     *sfinfo = (SF_INFO){0};
     SNDFILE* file = sf_open(filename, SFM_READ, sfinfo);
@@ -23,6 +34,17 @@ void reading_wav(const char *filename,WAVHeader *wheader,SNDFILE **file_ptr, SF_
     }
 
 }
+/**
+ * conf_of_al - Configures OpenAL source and queues audio buffers
+ *
+ * @param source Pointer to OpenAL source
+ * @param wheader Pointer to WAVHeader struct with audio parameters
+ * @param correct Pointer to error flag
+ * @param file SNDFILE pointer to the open audio file
+ *
+ * Determines audio format, reads data in chunks, creates and queues OpenAL buffers.
+ * Handles memory allocation and error checking throughout the process.
+ */
 void conf_of_al(ALuint *source, WAVHeader *wheader,int *correct,SNDFILE* file) {
     ALenum format;
     if (wheader->numChannels == 1) {
@@ -101,7 +123,20 @@ void conf_of_al(ALuint *source, WAVHeader *wheader,int *correct,SNDFILE* file) {
     printf("Loaded %d buffers\n", num_buffers);
     free(temp_buffer);
 }
-void playIt(ALuint *source, double *time_played,int *correct,float volume) {
+/**
+ * playIt - Plays audio and handles playback control
+ *
+ * @param source Pointer to OpenAL source
+ * @param time_played Pointer to store playback duration
+ * @param correct Pointer to error flag
+ * @param volume User-specified volume level
+ * @param args ThreadArgs containing skip flag
+ *
+ * Sets volume, plays audio, monitors playback state.
+ * Handles errors, allows skipping, and tracks play time.
+ * Uses OpenAL for audio playback and POSIX for timing.
+ */
+void playIt(ALuint *source, double *time_played,int *correct,float volume,ThreadArgs *args) {
     alSourcef(*source, AL_GAIN, volume);
    alSourcePlay(*source);
     if (alGetError() != AL_NO_ERROR) {
@@ -125,7 +160,13 @@ void playIt(ALuint *source, double *time_played,int *correct,float volume) {
             fprintf(stderr, "Error getting source state\n");
         *correct = 1;
             break;
-        }        printf("Playing... \n");
+        }
+        printf("Playing... \n");
+        pthread_mutex_lock(&skip_mutex);
+        if (*args->skip_flag) {
+            pthread_mutex_unlock(&skip_mutex);
+            break;
+        }
         nanosleep(&(struct timespec){0,500000000}, NULL);
     } while (buffers_processed < total_buffers);
 
@@ -149,19 +190,31 @@ alSourceStop(*source);
    alcDestroyContext(context);
    alcCloseDevice(device);
 }
-void PlayingSong(const char *filename,int *correct){
+/**
+ * PlayingSong - Plays an audio file with user-specified volume
+ *
+ * @param arg Pointer to ThreadArgs containing file path, error flag, and skip flag
+ *
+ * Prompts for volume, initializes audio, reads and plays WAV file.
+ * Handles volume adjustment, error checking, and allows skipping.
+ * Uses OpenAL for playback and libsndfile for file reading.
+ *
+ * @return NULL
+ */
+void *PlayingSong(void *arg){
+    ThreadArgs *args = (ThreadArgs *)arg;
     int user_volume;
     printf("Please input volume on rate of 1 to 10\n");
     scanf("%d",&user_volume);
     if(user_volume < 0){
         printf("volume cannot be negative\n");
-        *correct = 1;
-        return;
+        *args->correct = 1;
+        return NULL;
     }
     if(user_volume > 10){
         printf("volume is out of scale\n");
-        *correct = 1;
-        return;
+        *args->correct = 1;
+        return NULL;
     }
 
     float volume = (float)user_volume / 10.0f;
@@ -169,36 +222,37 @@ void PlayingSong(const char *filename,int *correct){
     ALCdevice *device = alcOpenDevice(NULL);
     if (!device) {
         fprintf(stderr, "Failed to open audio device\n");
-        *correct = 1;
-        return;
+        *args->correct = 1;
+        return NULL;
     }
     ALCcontext *context = alcCreateContext(device, NULL);
     if (!context) {
         fprintf(stderr, "Failed to create audio context\n");
         alcCloseDevice(device);
-        *correct = 1;
-        return;
+        *args->correct = 1;
+        return NULL;
     }
     alcMakeContextCurrent(context);
     SNDFILE *file = NULL;
     SF_INFO sfinfo = {0};
-    reading_wav(filename, &wheader, &file, &sfinfo);
+    reading_wav(args->path, &wheader, &file, &sfinfo);
     ALuint source;
     alGenSources(1, &source);
-    conf_of_al(&source, &wheader, correct, file);
-        if(*correct == 1){
+    conf_of_al(&source, &wheader, args->correct, file);
+        if(*args->correct == 1){
         sf_close(file);
-        return;
+        return NULL;
         }
     sf_close(file);
     if(!alIsSource(source)){
         fprintf(stderr,"audio is not playable \n" );
         }else {
         double time_played = 0;
-            playIt(&source,&time_played,correct,volume);
+            playIt(&source,&time_played,args->correct,volume,args);
             printf("audio was played for this time %f \n",time_played);
         }
     CleanUp(&source,context, device);
+    return NULL;
 
 }
 int CheckTheFile(const char *waves_file){

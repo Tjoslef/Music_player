@@ -4,6 +4,18 @@
 #include <time.h>
 #include <string.h>
 #include <stdlib.h>
+#include <stdbool.h>
+#include <pthread.h>
+#ifndef AUDIO_H
+#define AUDIO_H
+
+#include <stdbool.h>
+#include <pthread.h>
+
+extern volatile bool skip_flag;
+extern pthread_mutex_t skip_mutex;
+
+#endif
 typedef struct {
     char chunkID[4];       // "RIFF"
     uint32_t chunkSize;    // File size - 8 bytes
@@ -20,5 +32,9 @@ typedef struct {
     size_t num_samples;
     uint32_t data_size;
 } WAVHeader;
-
+typedef struct {
+    const char *path;
+    int *correct;
+    volatile bool *skip_flag;
+} ThreadArgs;
 

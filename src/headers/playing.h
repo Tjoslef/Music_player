@@ -14,5 +14,5 @@
         return retval;                                             \
     }                                                             \
 }
-void PlayingSong(const char *filename, int *correct);
+void *PlayingSong(void *arg);
 int CheckTheFile(const char *waves_file);

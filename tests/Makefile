@@ -1,27 +1,23 @@
-
 CPPUTEST_HOME = ./cpputest
-CXX = g++
-CXXFLAGS = -I$(CPPUTEST_HOME)/include
-LDFLAGS = -L$(CPPUTEST_HOME)/src/CppUTest -L$(CPPUTEST_HOME)/src/CppUTestExt -lCppUTest -lCppUTestExt
-
-SRCS = AllTests.cpp test_playing.cpp
-OBJS = $(SRCS:.cpp=.o)
-
-TARGET = test_runner
-
-all: $(TARGET)
-
-$(TARGET): $(OBJS)
-	$(CXX) $(OBJS) -o $@ $(LDFLAGS)
-
-%.o: %.cpp
-	$(CXX) $(CXXFLAGS) -c $< -o $@
-
-run: $(TARGET)
-	./$(TARGET)
-
-my-cleaner:
-	rm -f $(OBJS) $(TARGET)
-
 include $(CPPUTEST_HOME)/build/MakefileWorker.mk
 
+# Project-specific settings
+PROJECT_NAME = music_player
+TEST_SRC_DIRS = .
+SRC_DIRS = .
+
+# CppUTest specific settings
+CPPFLAGS += -I$(CPPUTEST_HOME)/include
+LD_LIBRARIES = -L$(CPPUTEST_HOME)/lib -lCppUTest -lCppUTestExt
+
+# Your source files
+SRC_FILES = AllTests.cpp test_playing.cpp
+
+# This line is important for CppUTest
+include $(CPPUTEST_HOME)/build/MakefileWorker.mk
+
+# Custom targets
+my-cleaner:
+	rm -f $(TARGET) $(OBJS)
+
+.PHONY: my-cleaner

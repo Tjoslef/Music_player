@@ -1,8 +1,8 @@
 CC = gcc
 COMMON_FLAGS = -std=c11 -O2 -D_GNU_SOURCE -D_DEFAULT_SOURCE -D_XOPEN_SOURCE=700
 STRICT_FLAGS = -Wall -Wextra -Werror
-CPPFLAGS = -I/usr/include/AL
-LDFLAGS = -lopenal -lsqlite3
+CPPFLAGS = -I/usr/include/AL -I/usr/include
+LDFLAGS = -lopenal -lsqlite3 -lsndfile -lm
 
 SRC_DIR = src
 OBJ_DIR = obj

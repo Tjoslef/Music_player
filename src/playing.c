@@ -1,113 +1,118 @@
 #include "headers/playing.h"
 #include "headers/audio.h"
-void readingHeader(FILE *waves_file, WAVHeader *wheader,int *correct) {
-    size_t read = fread(wheader, sizeof(WAVHeader), 1, waves_file);
-    if (read != 1) {
-        perror("wrong read");
-        *correct = 1;
-        return;
-    }
-
-    if (strncmp(wheader->chunkID, "RIFF", 4) != 0 || strncmp(wheader->format, "WAVE", 4) != 0) {
-        fprintf(stderr, "wrong file format\n");
-        *correct = 1;
-        return;
-    }
-
-    char chunk_id[4];
-    uint32_t chunk_size;
-    long data_pos = 36;
-    fseek(waves_file, 36, SEEK_SET);
-
-    fread(chunk_id, 1, 4, waves_file);
-    if (strncmp(chunk_id, "LIST", 4) == 0) {
-        fread(&chunk_size, sizeof(uint32_t), 1, waves_file);
-        data_pos += 8 + chunk_size;
-        fseek(waves_file, chunk_size, SEEK_CUR);
-        fread(chunk_id, 1, 4, waves_file);
-    }
-
-    if (strncmp(chunk_id, "data", 4) != 0) {
-        fprintf(stderr, "Expected data chunk\n");
-        *correct = 1;
-        return;
-    }
-
-    fread(&chunk_size, sizeof(uint32_t), 1, waves_file);
-    wheader->data_size = chunk_size;
-    wheader->num_samples = wheader->data_size / ((wheader->bitsPerSample / 8) * wheader->numChannels);
-
-    printf("Sample Rate: %u Hz\n", wheader->sampleRate);
-    printf("Channels: %u\n", wheader->numChannels);
-    printf("Bits Per Sample: %u\n", wheader->bitsPerSample);
-    printf("bytes in file: %u \n", wheader->chunkSize);
-    printf("Number of samples: %lu \n", wheader->num_samples);
-    printf("data size: %u \n", wheader->data_size);
-
-    data_pos += 8;
-    fseek(waves_file, data_pos, SEEK_SET);
-    long current_pos = ftell(waves_file);
-    printf("Reading from position: %ld\n", current_pos);
+void clear_buffer(ALuint *buffers,short *temp_buffer){
+            free(temp_buffer);
+            free(buffers);
 }
-void conf_of_al(ALuint *source,WAVHeader *wheader,FILE *waves_file,int *correct){
+void reading_wav(const char *filename,WAVHeader *wheader,SNDFILE **file_ptr, SF_INFO *sfinfo){
+    *sfinfo = (SF_INFO){0};
+    SNDFILE* file = sf_open(filename, SFM_READ, sfinfo);
+    if(!file){
+        fprintf(stderr,"error in opening of file ");
+    }
+    *file_ptr = file;
+    printf("Frames: %ld\n", sfinfo->frames);
+    printf("Sample rate: %d\n", sfinfo->samplerate);
+    printf("Channels: %d\n", sfinfo->channels);
+    wheader->numChannels = sfinfo->channels;
+    wheader->sampleRate = sfinfo->samplerate;
+    sf_count_t offset = sf_seek(file, 0, SEEK_SET);
+    if(offset == - 1){
+        fprintf(stderr,"error in getting pointer \n");
+        sf_close(file);
+    }
+
+}
+void conf_of_al(ALuint *source, WAVHeader *wheader,int *correct,SNDFILE* file) {
     ALenum format;
     if (wheader->numChannels == 1) {
         format = AL_FORMAT_MONO16;
     } else if (wheader->numChannels == 2) {
         format = AL_FORMAT_STEREO16;
     } else {
-        fprintf(stderr, "Unsupported number of channels\n");
+        fprintf(stderr, "Unsupported number of channels: %d\n", wheader->numChannels);
         *correct = 1;
         return;
-    }
-    int buffer_size = wheader->sampleRate * wheader->numChannels * (wheader->bitsPerSample / 8);
-    unsigned char temp_buffer[buffer_size];
-    ALuint buffers[buffer_size];
-    alGenBuffers(NUM_BUFFERS, buffers);
-    for(int i = 0;i < NUM_BUFFERS;i++){
-        size_t bytes_read = fread(temp_buffer,1,buffer_size,waves_file);
-        if(bytes_read == 0){
-            fprintf(stderr, "No more data to read from file\n");
-        *correct = 1;
-            break;
-        }
-        alBufferData(buffers[i], format, temp_buffer, bytes_read, wheader->sampleRate);
-         if (alGetError() != AL_NO_ERROR) {
-            fprintf(stderr, "Error loading buffer data\n");
-        *correct = 1;
-            return;
-        }
-        alSourceQueueBuffers(*source, 1, &buffers[i]);
-      ALint error = alGetError();
-    if (error != AL_NO_ERROR) {
-        fprintf(stderr, "Error queueing buffer: %s\n", alGetString(error));
-        *correct = 1;
-        return;
-    }
-    }
-    ALenum error = alGetError();
-    if (error != AL_NO_ERROR) {
-        fprintf(stderr, "OpenAL error: %s\n", alGetString(error));
-        *correct = 1;
     }
 
-    ALint buffer_attached;
-    alGetSourcei(*source, AL_BUFFERS_QUEUED, &buffer_attached);
-    if (buffer_attached == 0) {
-        fprintf(stderr, "No buffer attached to source\n");
+    int buffer_size = wheader->sampleRate * wheader->numChannels * sizeof(short);
+    short *temp_buffer = malloc(buffer_size);
+    if (!temp_buffer) {
+        fprintf(stderr, "Failed to allocate temporary buffer\n");
         *correct = 1;
+        return;
     }
+    printf("Buffer size: %d bytes\n", buffer_size);
+
+    ALuint *buffers = NULL;
+    int num_buffers = 0;
+    while (1) {
+        sf_count_t frames_read = sf_readf_short(file, temp_buffer, buffer_size / (wheader->numChannels * sizeof(short)));
+        if (frames_read == 0) {
+            if (sf_error(file)) {
+               fprintf(stderr, "Error reading from file: %s\n", sf_strerror(file));
+                *correct = 1;
+                clear_buffer(buffers, temp_buffer);
+                return;
+            }
+            break;
+        }
+
+        ALuint buffer;
+        alGenBuffers(1, &buffer);
+        ALenum error = alGetError();
+        if (error != AL_NO_ERROR) {
+            fprintf(stderr, "Failed to generate buffer: %s\n", alGetString(error));
+            *correct = 1;
+            clear_buffer(buffers, temp_buffer);
+            return;
+        }
+
+        alBufferData(buffer, format, temp_buffer,frames_read * wheader->numChannels * sizeof(short), wheader->sampleRate);
+        error = alGetError();
+        if (error != AL_NO_ERROR) {
+            fprintf(stderr, "Failed to load buffer data: %s\n   error code %d", alGetString(error),error);
+            *correct = 1;
+            clear_buffer(buffers, temp_buffer);
+            return;
+        }
+
+        num_buffers++;
+        ALuint *new_buffers = realloc(buffers, num_buffers * sizeof(ALuint));
+        if (new_buffers == NULL) {
+            fprintf(stderr, "Failed to reallocate buffer array\n");
+            *correct = 1;
+            clear_buffer(buffers, temp_buffer);
+            return;
+        }
+        buffers = new_buffers;
+        buffers[num_buffers - 1] = buffer;
+
+        alSourceQueueBuffers(*source, 1, &buffer);
+        error = alGetError();
+        if (error != AL_NO_ERROR) {
+            fprintf(stderr, "Failed to queue buffer: %s\n", alGetString(error));
+            *correct = 1;
+            clear_buffer(buffers, temp_buffer);
+            return;
+        }
+    }
+
+    printf("Loaded %d buffers\n", num_buffers);
+    free(temp_buffer);
 }
-void playIt(ALuint *source, double *time_played,float volume,int *correct) {
+void playIt(ALuint *source, double *time_played,int *correct,float volume) {
     alSourcef(*source, AL_GAIN, volume);
-    alSourcePlay(*source);
-    ALenum error = alGetError();
-    if (error != AL_NO_ERROR) {
-        printf("Error starting playback: %s\n", alGetString(error));
+   alSourcePlay(*source);
+    if (alGetError() != AL_NO_ERROR) {
+        fprintf(stderr, "Error starting playback\n");
         *correct = 1;
         return;
     }
     ALint state;
+    ALint total_buffers;
+    ALint buffers_processed;
+    alGetSourcei(*source, AL_BUFFERS_QUEUED,&total_buffers);
     printf("Starting audio playback\n");
 
     struct timespec start_time, end_time;
@@ -115,13 +120,14 @@ void playIt(ALuint *source, double *time_played,float volume,int *correct) {
 
     do {
         alGetSourcei(*source, AL_SOURCE_STATE, &state);
-        if (alGetError() != AL_NO_ERROR) {
+        alGetSourcei(*source, AL_BUFFERS_PROCESSED, &buffers_processed);
+        if (alGetError() != AL_NO_ERROR && buffers_processed < total_buffers) {
             fprintf(stderr, "Error getting source state\n");
         *correct = 1;
             break;
         }        printf("Playing... \n");
         nanosleep(&(struct timespec){0,500000000}, NULL);
-    } while (state == AL_PLAYING);
+    } while (buffers_processed < total_buffers);
 
     clock_gettime(CLOCK_MONOTONIC, &end_time);
     *time_played = (end_time.tv_sec - start_time.tv_sec) +
@@ -143,7 +149,7 @@ alSourceStop(*source);
    alcDestroyContext(context);
    alcCloseDevice(device);
 }
-void PlayingSong(FILE *waves_file,int *correct){
+void PlayingSong(const char *filename,int *correct){
     int user_volume;
     printf("Please input volume on rate of 1 to 10\n");
     scanf("%d",&user_volume);
@@ -159,12 +165,7 @@ void PlayingSong(FILE *waves_file,int *correct){
     }
 
     float volume = (float)user_volume / 10.0f;
-    WAVHeader *wheader = malloc(sizeof(WAVHeader));
-    if(wheader == NULL){
-        perror("Malloc of wheader is wrong");
-        *correct = 1;
-    return;
-    }
+    WAVHeader wheader;
     ALCdevice *device = alcOpenDevice(NULL);
     if (!device) {
         fprintf(stderr, "Failed to open audio device\n");
@@ -179,34 +180,36 @@ void PlayingSong(FILE *waves_file,int *correct){
         return;
     }
     alcMakeContextCurrent(context);
-    readingHeader(waves_file, wheader,correct);
-    if(*correct == 1){
-        return;
-        }
-    double time_played = 0;
+    SNDFILE *file = NULL;
+    SF_INFO sfinfo = {0};
+    reading_wav(filename, &wheader, &file, &sfinfo);
     ALuint source;
     alGenSources(1, &source);
-    conf_of_al(&source, wheader,waves_file,correct);
+    conf_of_al(&source, &wheader, correct, file);
         if(*correct == 1){
+        sf_close(file);
         return;
         }
+    sf_close(file);
     if(!alIsSource(source)){
         fprintf(stderr,"audio is not playable \n" );
         }else {
-            playIt(&source,&time_played,volume,correct);
+        double time_played = 0;
+            playIt(&source,&time_played,correct,volume);
             printf("audio was played for this time %f \n",time_played);
         }
     CleanUp(&source,context, device);
-    free(wheader);
 
 }
-FILE* CheckTheFile(char *waves_file){
-    FILE *wa_file = fopen(waves_file,"r");
+int CheckTheFile(const char *waves_file){
+    FILE *wa_file = fopen(waves_file,"rb");
     if(!wa_file){
             fprintf(stderr,"file doesnt exist");
-            return NULL;
+            return 1;
+        fclose(wa_file);
        }
-    return wa_file;
+    fclose(wa_file);
+    return 0;
 }
 /*add function stop and continue
  add function skip 5s

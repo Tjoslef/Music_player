@@ -1,9 +1,7 @@
 #pragma once
-
 #include <stdint.h>
 #include <stdio.h>
 #include <time.h>
-#define NUM_BUFFERS 4
 #include <string.h>
 #include <stdlib.h>
 typedef struct {

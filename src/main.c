@@ -3,7 +3,6 @@
 #include "./headers/read_platlist.h"
 #include "./headers/audio.h"
 #include <ctype.h>
-#include <stdio.h>
 #include <string.h>
 char *trimming(char *name){
     if(name == NULL) return NULL;
@@ -27,99 +26,130 @@ char get_user_input(const char *prompt) {
     }
     return '\0';
 }
-int main(){
-    sqlite3 *db = NULL;
-    int rc;
-    char *q1 = "Do you want to play song y/n?\n";
-    char an1 = get_user_input(q1);
-    if(an1 == 'y' || an1 == 'Y'){
-       char file[256];
-        printf("Give path to file \n :");
-        if (fgets(file, sizeof(file), stdin) != NULL) {
-           file[strcspn(file, "\n")] = '\0';
-            FILE *song_check = CheckTheFile(file);
-            if (song_check) {
-                int correct = 0;
-                PlayingSong(song_check, &correct);
-                if (correct != 0) {
-                    fprintf(stderr, "Playing went wrong\n");
-                }
-                fclose(song_check);
-            }
-        }
-    }
-    char *q2 = "Do you want to create a playlist y/n \n";
-    char an2 = get_user_input(q2);
-    if (an2 == 'y' || an2 == 'Y') {
-        db = OpenDB(&rc);
-        if (db == NULL) {
-            fprintf(stderr, "Failed to open database\n");
-            return 1;
-        }
-        char dbName[256];
-        int con = true;
-        printf("What name do you want for it \n");
-        if(fgets(dbName, sizeof(dbName),stdin) != NULL){
-            int id_playlist = -1;
-            createPlaylist(db,trimming(dbName),&id_playlist);
-            while(con){
-                char song[256];
-                printf("past the file adress of the song \n");
-                if(fgets(song, sizeof(song),stdin) != NULL){
-                     song[strcspn(song, "\n")] = '\0';
-                }else {
-                fprintf(stdout,"wrong path");
-                    continue;
-                }
-                FILE *song_check = CheckTheFile(song);
-                if(!song_check){
-                    printf("wrong path");
-                    continue;
-                }
-            const char *name = getName(song);
-            printf("name of song: %s \n",name);
-           if(insertPlaylist(song,db,name) != '\0'){
-                fprintf(stderr, "Failed to insert song into playlist\n");
-            }
-            char *q3 = "do you want to add more songs? (y/n) \n";
-            char an3 = get_user_input(q3);
-            if(an3 == 'n' || an3 == 'N'){
-                con = false;
-            }
-        }
-        sqlite3_close(db);
-    }
-    }
-    char *q4 = "Do you want to start playing from playlist  (y/n) \n";
-    char an4 = get_user_input(q4);
-    if (an4 == 'y' || an4 == 'Y') {
-        db = OpenDB(&rc);
-        if (db == NULL) {
-            fprintf(stderr, "Failed to open database \n");
-            return 1;
-        }
-        printf("what is name of playlist \n");
-        char an5[256];
-        if(fgets(an5,sizeof(an5) ,stdin) != NULL){
+void set_nonblock(int state){
+    struct terminos ttystate;
 
-            int id = finding_playlist(db,trimming(an5));
-            if(id != -1){
-                SongNode *head = reading_in_order(db,id);
-                while(head != NULL){
-                    FILE *song_check = CheckTheFile(head->path);
-                    if (song_check) {
-                        int correct = 0;
-                        PlayingSong(song_check, &correct);
-                        if (correct != 0) {
-                           fprintf(stderr, "Failed playing song: %s\n", head->name);
-                        }
-                        fclose(song_check);
+}
+int main(){
+    int rc;
+    sqlite3 *db = NULL;
+    bool cont = true;
+while(cont){
+    char *q1 = "Options:\n"
+                   "1. Play a song\n"
+                   "2. Create playlist\n"
+                   "3. Play from playlist\n"
+                   "4. Help\n"
+                   "Enter your choice: ";
+    char an1 = get_user_input(q1);
+    switch (an1) {
+        case '1':
+            {
+            char file[256];
+            printf("Give path to file \n :");
+            if (fgets(file, sizeof(file), stdin) != NULL) {
+               file[strcspn(file, "\n")] = '\0';
+                if (CheckTheFile(file) != 1) {
+                    int correct = 0;
+                    PlayingSong(file, &correct);
+                    if (correct != 0) {
+                        fprintf(stderr, "Playing went wrong\n");
                     }
-                    head = head->next;
+                }
             }
+            }
+            break;
+        case '2':
+            {
+            db = OpenDB(&rc);
+            if (db == NULL) {
+                fprintf(stderr, "Failed to open database\n");
+                 return 1;
+            }
+            char dbName[256];
+            int con = true;
+            printf("What name do you want for it \n");
+            if(fgets(dbName, sizeof(dbName),stdin) != NULL){
+                int id_playlist = -1;
+                createPlaylist(db,trimming(dbName),&id_playlist);
+                while(con){
+                    char song[256];
+                    printf("past the file adress of the song \n");
+                    if(fgets(song, sizeof(song),stdin) != NULL){
+                         song[strcspn(song, "\n")] = '\0';
+                    }else {
+                    fprintf(stdout,"file has to have path to it");
+                        continue;
+                    }
+                    if(CheckTheFile(song) == 1){
+                        printf("wrong path");
+                        continue;
+                    }
+                const char *name = getName(song);
+                printf("name of song: %s \n",name);
+               if(insertPlaylist(song,db,name,id_playlist) != '\0'){
+                    fprintf(stderr, "Failed to insert song into playlist\n");
+                }
+                char *q3 = "do you want to add more songs? (y/n) \n";
+                char an3 = get_user_input(q3);
+                if(an3 == 'n' || an3 == 'N'){
+                    con = false;
+                }
+            }
+            sqlite3_close(db);
+        }
+            }
+            break;
+        case '3':
+            {
+                db = OpenDB(&rc);
+                if (db == NULL) {
+                    fprintf(stderr, "Failed to open database \n");
+                    return 1;
+                }
+                printf("what is name of playlist \n");
+                char an5[256];
+                if(fgets(an5,sizeof(an5) ,stdin) != NULL){
+
+                    int id = finding_playlist(db,trimming(an5));
+                    if(id != -1){
+                        SongNode *head = reading_in_order(db,id);
+                        if(head == NULL){
+                            fprintf(stderr,"something of in reading playlist \n");
+                        }
+                            while(head != NULL){
+                                char c[256];
+                                char n;
+                                printf("playing.. \n");
+                                int correct = 0;
+                                PlayingSong(head->path, &correct);
+                                if (correct != 0) {
+                                   fprintf(stderr, "Failed playing song: %s\n", head->name);
+                            }
+                            head = head->next;
+                    }
+                }
+            }
+            }
+                break;
+        case '4':
+            {
+            printf("1.option you put path of song you want to play \n");
+            printf("2.option you can create your playlist \n");
+            printf("3.option you can play playlist which you already created \n");
+            }
+            break;
+        default:
+            printf("wrong input");
+    }
+        int c;
+       while ((c= getchar()) != '\n' && c != EOF){}
+        char *q2 = "Do you want to continue (y/n) ?";
+        char an = get_user_input(q2);
+        if(an != 'y' && an != 'Y'){
+            cont = false;
         }
     }
-        }
 return 0;
 }
 

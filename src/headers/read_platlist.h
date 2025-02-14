@@ -11,5 +11,5 @@ typedef struct SongNode {
 } SongNode;
 const char *reading_song_form_db(sqlite3 *db,char *name);
 SongNode *reading_in_order(sqlite3 *db,int id);
-int finding_playlist(sqlite3 *db, char *name_playlist);
+int finding_playlist(sqlite3 *db,const char *name_playlist);
 

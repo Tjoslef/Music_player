@@ -39,62 +39,81 @@ void free_song_list(SongNode *head){
     free(temp);
     }
 }
-SongNode *reading_in_order(sqlite3 *db,int id){
-    if(db == NULL){
-        fprintf(stderr,"database isnt establish");
-        return NULL;
-    }
-    sqlite3_stmt *stmt;
-   const char *sql =
-   "SELECT songs.path, songs.name, playlist_songs.position "
-"FROM playlist_songs "
-"INNER JOIN songs ON playlist_songs.song_id = songs.id "
-"WHERE playlist_songs.playlist_id = ? "
-"ORDER BY playlist_songs.position";
-    int rc = sqlite3_prepare_v2(db, sql, -1, &stmt,NULL);
-    if(rc != SQLITE_OK){
-        fprintf(stderr, "something gone wrong in preparation %s \n",sqlite3_errmsg(db));
+SongNode *reading_in_order(sqlite3 *db, int id) {
+    if (db == NULL) {
+        fprintf(stderr, "Database isn't established\n");
         return NULL;
     }
 
-    sqlite3_bind_int(stmt,1,id);
-    rc = sqlite3_step(stmt);
+    sqlite3_stmt *stmt;
+    const char *sql =
+        "SELECT songs.path, songs.name, playlist_songs.position "
+        "FROM playlist_songs "
+        "INNER JOIN songs ON playlist_songs.song_id = songs.id "
+        "WHERE playlist_songs.playlist_id = ? "
+        "ORDER BY playlist_songs.position";
+
+    int rc = sqlite3_prepare_v2(db, sql, -1, &stmt, NULL);
+    if (rc != SQLITE_OK) {
+        fprintf(stderr, "Preparation failed: %s\n", sqlite3_errmsg(db));
+        return NULL;
+    }
+
+    rc = sqlite3_bind_int(stmt, 1, id);
+    if (rc != SQLITE_OK) {
+        fprintf(stderr, "Binding failed: %s\n", sqlite3_errmsg(db));
+        sqlite3_finalize(stmt);
+        return NULL;
+    }
 
     SongNode *head = NULL;
     SongNode *tail = NULL;
-    while((rc = sqlite3_step(stmt)) == SQLITE_ROW) {
+
+    while ((rc = sqlite3_step(stmt)) == SQLITE_ROW) {
         SongNode *newSong = malloc(sizeof(SongNode));
-        if(newSong == NULL){
-            fprintf(stderr, "Error in malloc");
+        if (newSong == NULL) {
+            fprintf(stderr, "Memory allocation failed\n");
             free_song_list(head);
-            return  NULL;
+            sqlite3_finalize(stmt);
+            return NULL;
         }
+
         newSong->path = strdup((const char *)sqlite3_column_text(stmt, 0));
         newSong->name = strdup((const char *)sqlite3_column_text(stmt, 1));
+
+        if (newSong->path == NULL || newSong->name == NULL) {
+            fprintf(stderr, "String duplication failed\n");
+            free(newSong->path);
+            free(newSong->name);
+            free(newSong);
+            free_song_list(head);
+            sqlite3_finalize(stmt);
+            return NULL;
+        }
+
         newSong->next = NULL;
         newSong->prev = NULL;
-    if(head == NULL){
-        head = newSong;
-        tail = newSong;
-    }else{
-        tail->next = newSong;
-        newSong->prev = tail;
-        tail = newSong;
+
+        if (head == NULL) {
+            head = tail = newSong;
+        } else {
+            tail->next = newSong;
+            newSong->prev = tail;
+            tail = newSong;
         }
+
+        printf("Added song: %s (%s)\n", newSong->name, newSong->path);
     }
 
-    if(rc != SQLITE_DONE){
-        fprintf(stderr, "Error executing query: %s\n", sqlite3_errmsg(db));
-        while (head != NULL) {
-           free_song_list(head);
-        }
+    if (rc != SQLITE_DONE) {
+        fprintf(stderr, "Query execution failed: %s\n", sqlite3_errmsg(db));
+        free_song_list(head);
         head = NULL;
     }
+
     sqlite3_finalize(stmt);
     return head;
-
-}
-int finding_playlist(sqlite3 *db,char *name_playlist){
+}int finding_playlist(sqlite3 *db,const char *name_playlist){
 
    if(db == NULL){
 

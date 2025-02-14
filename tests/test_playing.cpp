@@ -1,12 +1,9 @@
-#include "CppUTest/TestHarness.h"
 #include <CppUTest/UtestMacros.h>
 #include "CppUTestExt/MockSupport.h"
 
 extern "C" {
-#include "/home/tjoslef/skola/music_player/src/headers/audio.h"
 #include "/home/tjoslef/skola/music_player/src/headers/playing.h"
 #include "/home/tjoslef/skola/music_player/src/headers/playlist.h"
-#include "/home/tjoslef/skola/music_player/src/headers/read_platlist.h"
 #include "/home/tjoslef/skola/music_player/src/headers/main.h"
 }
 
@@ -34,8 +31,8 @@ TEST(Music_player_test_group, Test_checking_file) {
     mock().expectOneCall("fopen").withParameter("filename", validPath).andReturnValue(validFile);
     mock().expectOneCall("fopen").withParameter("filename", invalidPath).andReturnValue(NULL);
 
-    CHECK(CheckTheFile(validPath) != NULL);
-    CHECK(CheckTheFile(invalidPath) == NULL);
+    CHECK(CheckTheFile(validPath) == 0);
+    CHECK(CheckTheFile(invalidPath) == 1);
 
     fclose(validFile);
     mock().checkExpectations();
@@ -57,9 +54,19 @@ TEST(Music_player_test_group, Test_creation_playlist) {
     CHECK(id_playlist != -1);
     mock().checkExpectations();
 }
+TEST(Music_player_test_group, sound_check){
+    const char* song = "/home/tjoslef/skola/music_player/tests/crang.wav";
+    int *correct = 0;
+    mock().expectOneCall("PlayingSong")
+          .withParameter("filename",song)
+          .withParameter("correct",&correct);
+   PlayingSong(song,correct);
+    CHECK(*correct == 0);
+    mock().checkExpectations();
 
+}
 TEST(Music_player_test_group, Test_find_playlist) {
-    sqlite3* db = (sqlite3*)1;
+    sqlite3* db = reinterpret_cast<sqlite3*>(0x1234);
     const char *validPlaylist = "Test_Playlist";
     const char *invalidPlaylist = "wrong_playlist";
 
